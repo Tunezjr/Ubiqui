@@ -39,7 +39,15 @@
 </div>
 
 <div class="trace" id="trace"></div>
+<div class="amount-row">
+<span class="amount-lbl">Amount</span>
+<input type="number" id="amount" placeholder="Enter amount" min="0.001" step="1">
+<span class="mon-lbl">MON</span>
 
+<button id="simBtn" onclick="simulate()">Simulate Send</button>
+
+<button id="sendBtn" onclick="sendTransaction()">Send Transaction</button>
+</div>
 </main>
 
 <script src="app.js"></script>
