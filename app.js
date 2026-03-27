@@ -98,5 +98,66 @@ btn.disabled=false
 },steps.length*300+200)
 function toggleTheme(){
 document.body.classList.toggle("dark")
+const SHIELD_CONTRACT = "0xYOUR_CONTRACT_ADDRESS"
+
+const ABI = [
+"function shieldedSend(address recipient, uint256 amount) payable"
+]
+
+async function sendTransaction(){
+
+const trace = document.getElementById("trace")
+
+if(!signer){
+trace.innerHTML='<div style="color:red;font-size:11px">Connect wallet first.</div>'
+return
+}
+
+const recipient=document.getElementById("recipient").value.trim()
+const amount=document.getElementById("amount").value
+
+if(!recipient){
+trace.innerHTML='<div style="color:red;font-size:11px">Enter recipient.</div>'
+return
+}
+
+if(!amount || amount<=0){
+trace.innerHTML='<div style="color:red;font-size:11px">Enter valid amount.</div>'
+return
+}
+
+const btn=document.getElementById("sendBtn")
+btn.disabled=true
+
+trace.innerHTML="Submitting transaction..."
+
+try{
+
+const contract=new ethers.Contract(
+SHIELD_CONTRACT,
+ABI,
+signer
+)
+
+const tx=await contract.shieldedSend(
+recipient,
+ethers.parseEther(amount)
+)
+
+trace.innerHTML=`Transaction submitted<br><br>hash: ${tx.hash}<br>waiting for confirmation...`
+
+await tx.wait()
+
+trace.innerHTML=`Transaction confirmed<br><br>tx hash: ${tx.hash}`
+
+}catch(e){
+
+trace.innerHTML="Transaction failed: "+e.message
+
+}
+
+btn.disabled=false
+}
+
 }
 }
