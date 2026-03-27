@@ -143,7 +143,8 @@ signer
 
 const tx = await contract.shieldedSend(
 recipient,
-amountWei
+amountWei,
+{ value: amountWei }
 )
 
 trace.innerHTML=`Transaction submitted<br><br>hash: ${tx.hash}<br>waiting for confirmation...`
