@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.10.0/dist/ethers.umd.min.js"></script>
+
+</head>
+
+<body>
+
+<main>
+
+<h2>⬡ ShieldWallet — Transaction Simulation</h2>
+
+<div class="addr-row">
+
+<div class="addr-box">
+<div class="addr-lbl">From (Your Wallet)</div>
+<div class="addr-val" id="fromAddr">Not connected</div>
+<button onclick="connectWallet()" style="margin-top:10px">Connect Wallet</button>
+</div>
+
+<div class="arrow-mid">→</div>
+
+<div class="addr-box">
+<div class="addr-lbl">To (Recipient)</div>
+<input id="recipient" class="addr-input" placeholder="Enter recipient address">
+</div>
+
+</div>
+
+<div class="amount-row">
+<span class="amount-lbl">Amount</span>
+<input type="number" id="amount" placeholder="Enter amount" min="0.001" step="1">
+<span class="mon-lbl">MON</span>
+<button id="simBtn" onclick="simulate()">Simulate Send</button>
+</div>
+
+<div class="trace" id="trace"></div>
+
+</main>
+
+<script src="app.js"></script>
+
+</body>
+</html>
