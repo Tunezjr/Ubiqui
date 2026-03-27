@@ -96,5 +96,7 @@ fin.innerHTML=`<div class="final-title">Block Explorer View</div>
 trace.appendChild(fin)
 btn.disabled=false
 },steps.length*300+200)
-
+function toggleTheme(){
+document.body.classList.toggle("dark")
+}
 }
