@@ -108,10 +108,6 @@ async function sendTransaction(){
 
 const trace = document.getElementById("trace")
 
-if(!signer){
-trace.innerHTML='<div style="color:red;font-size:11px">Connect wallet first.</div>'
-return
-}
 
 const recipient=document.getElementById("recipient").value.trim()
 const amount=document.getElementById("amount").value
