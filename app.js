@@ -139,9 +139,9 @@ ABI,
 signer
 )
 
-const tx=await contract.shieldedSend(
+const tx = await contract.shieldedSend(
 recipient,
-ethers.parseEther(amount)
+amountWei
 )
 
 trace.innerHTML=`Transaction submitted<br><br>hash: ${tx.hash}<br>waiting for confirmation...`
