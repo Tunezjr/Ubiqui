@@ -1,0 +1,40 @@
+{
+  "name": "ubiqui-monad-bot",
+  "version": "0.1.0",
+  "description": "Ubiqui — a MEVX-style Monad trading bot with sniping, copy-trade, and risk management.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "ubiqui": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "start": "node --enable-source-maps dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "snipe": "tsx src/index.ts snipe",
+    "copy": "tsx src/index.ts copy",
+    "quote": "tsx src/index.ts quote",
+    "wallet": "tsx src/index.ts wallet",
+    "lint": "tsc -p . --noEmit",
+    "test": "node --test --import tsx 'test/**/*.test.ts'"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "p-queue": "^8.0.1",
+    "pino": "^9.5.0",
+    "pino-pretty": "^11.2.2",
+    "viem": "^2.21.0",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}
