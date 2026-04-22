@@ -1,9 +1,9 @@
 import type { Address } from 'viem';
+import { publicClient } from './chain.js';
 import { loadConfig } from './config.js';
 import { logger } from './logger.js';
 import { quoteSell } from './router.js';
 import { getTokenMetadata } from './tokens.js';
-import { publicClient } from './chain.js';
 
 const cfg = loadConfig();
 
@@ -19,10 +19,21 @@ export type Position = {
 
 export type ExitReason = 'stop-loss' | 'take-profit' | 'trailing-stop' | 'manual';
 
+export type ExitEvent = {
+  position: Position;
+  reason: ExitReason;
+  price: number;
+  tx?: string;
+};
+
+type ExitListener = (event: ExitEvent) => void;
+
 export class PositionBook {
   private positions = new Map<Address, Position>();
   private dailyPnlMon = 0;
   private dailyResetAt = Date.now() + 24 * 60 * 60 * 1000;
+  private evalTimer?: NodeJS.Timeout;
+  private exitListeners = new Set<ExitListener>();
 
   size(): number {
     return this.positions.size;
@@ -30,6 +41,10 @@ export class PositionBook {
 
   list(): Position[] {
     return [...this.positions.values()];
+  }
+
+  dailyPnl(): number {
+    return this.dailyPnlMon;
   }
 
   canOpen(): boolean {
@@ -63,24 +78,31 @@ export class PositionBook {
     const pnl = (exitPriceMon - pos.entryPriceMon) * (Number(pos.amount) / 10 ** pos.decimals);
     this.rollDaily();
     this.dailyPnlMon += pnl;
-    logger.info(
-      { token, symbol: pos.symbol, reason, pnlMon: pnl.toFixed(6) },
-      'position closed',
-    );
+    logger.info({ token, symbol: pos.symbol, reason, pnlMon: pnl.toFixed(6) }, 'position closed');
     return pos;
   }
 
-  private rollDaily(): void {
-    if (Date.now() > this.dailyResetAt) {
-      this.dailyPnlMon = 0;
-      this.dailyResetAt = Date.now() + 24 * 60 * 60 * 1000;
-    }
+  onExit(listener: ExitListener): () => void {
+    this.exitListeners.add(listener);
+    return () => this.exitListeners.delete(listener);
   }
 
-  /** Returns positions that should be exited along with the reason. */
-  async evaluate(): Promise<Array<{ position: Position; reason: ExitReason; price: number }>> {
-    const results: Array<{ position: Position; reason: ExitReason; price: number }> = [];
-    for (const pos of this.positions.values()) {
+  startAutoExit(intervalMs = 15_000): void {
+    if (this.evalTimer) return;
+    this.evalTimer = setInterval(() => {
+      void this.runEvaluation();
+    }, intervalMs);
+  }
+
+  stopAutoExit(): void {
+    if (!this.evalTimer) return;
+    clearInterval(this.evalTimer);
+    this.evalTimer = undefined;
+  }
+
+  private async runEvaluation(): Promise<void> {
+    const { sell } = await import('./router.js');
+    for (const pos of [...this.positions.values()]) {
       try {
         const quote = await quoteSell(pos.token, pos.amount);
         const price = quote.pricePerToken;
@@ -89,17 +111,31 @@ export class PositionBook {
         const changePct = ((price - pos.entryPriceMon) / pos.entryPriceMon) * 100;
         const drawdownPct = ((pos.peakPriceMon - price) / pos.peakPriceMon) * 100;
 
-        if (changePct <= -cfg.STOP_LOSS_PCT) {
-          results.push({ position: pos, reason: 'stop-loss', price });
-        } else if (changePct >= cfg.TAKE_PROFIT_PCT) {
-          results.push({ position: pos, reason: 'take-profit', price });
-        } else if (drawdownPct >= cfg.TRAILING_STOP_PCT && changePct > 0) {
-          results.push({ position: pos, reason: 'trailing-stop', price });
+        let reason: ExitReason | null = null;
+        if (changePct <= -cfg.STOP_LOSS_PCT) reason = 'stop-loss';
+        else if (changePct >= cfg.TAKE_PROFIT_PCT) reason = 'take-profit';
+        else if (drawdownPct >= cfg.TRAILING_STOP_PCT && changePct > 0) reason = 'trailing-stop';
+        if (!reason) continue;
+
+        const hash = await sell(pos.token, pos.amount);
+        this.close(pos.token, price, reason);
+        for (const l of this.exitListeners) {
+          try {
+            l({ position: pos, reason, price, tx: hash });
+          } catch (err) {
+            logger.warn({ err }, 'exit listener threw');
+          }
         }
       } catch (err) {
         logger.warn({ err, token: pos.token }, 'failed to evaluate position');
       }
     }
-    return results;
+  }
+
+  private rollDaily(): void {
+    if (Date.now() > this.dailyResetAt) {
+      this.dailyPnlMon = 0;
+      this.dailyResetAt = Date.now() + 24 * 60 * 60 * 1000;
+    }
   }
 }
