@@ -3,7 +3,6 @@ import {
   createWalletClient,
   defineChain,
   http,
-  webSocket,
   type Address,
   type Hex,
   type PublicClient,
@@ -18,27 +17,18 @@ export const monad = defineChain({
   id: cfg.MONAD_CHAIN_ID,
   name: 'Monad',
   nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 },
-  rpcUrls: {
-    default: { http: [cfg.MONAD_RPC_URL], webSocket: cfg.MONAD_WS_URL ? [cfg.MONAD_WS_URL] : [] },
-  },
-  blockExplorers: {
-    default: { name: 'MonadExplorer', url: cfg.MONAD_EXPLORER },
-  },
+  rpcUrls: { default: { http: [cfg.MONAD_RPC_URL] } },
+  blockExplorers: { default: { name: 'MonadExplorer', url: cfg.MONAD_EXPLORER } },
 });
 
 export const publicClient: PublicClient = createPublicClient({
   chain: monad,
-  transport: cfg.MONAD_WS_URL ? webSocket(cfg.MONAD_WS_URL) : http(cfg.MONAD_RPC_URL),
-});
-
-export const httpClient: PublicClient = createPublicClient({
-  chain: monad,
-  transport: http(cfg.MONAD_RPC_URL),
+  transport: http(cfg.MONAD_RPC_URL, { timeout: 15_000 }),
 });
 
 export function getWallet(): { client: WalletClient; address: Address } {
   if (!cfg.WALLET_PRIVATE_KEY) {
-    throw new Error('WALLET_PRIVATE_KEY is required for this operation');
+    throw new Error('WALLET_PRIVATE_KEY is required');
   }
   const account = privateKeyToAccount(cfg.WALLET_PRIVATE_KEY as Hex);
   const client = createWalletClient({

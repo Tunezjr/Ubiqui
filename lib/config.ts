@@ -1,7 +1,5 @@
-import 'dotenv/config';
 import { z } from 'zod';
-import type { Address } from 'viem';
-import { isAddress } from 'viem';
+import { isAddress, type Address } from 'viem';
 
 const bool = z
   .union([z.boolean(), z.string()])
@@ -12,7 +10,7 @@ const addr = z
   .refine((s) => isAddress(s), 'expected a 0x-prefixed address')
   .transform((s) => s as Address);
 
-const numFromEnv = (fallback: number) =>
+const num = (fallback: number) =>
   z
     .union([z.string(), z.number()])
     .optional()
@@ -21,8 +19,7 @@ const numFromEnv = (fallback: number) =>
 
 const schema = z.object({
   MONAD_RPC_URL: z.string().url(),
-  MONAD_WS_URL: z.string().url().optional(),
-  MONAD_CHAIN_ID: numFromEnv(10143),
+  MONAD_CHAIN_ID: num(10143),
   MONAD_EXPLORER: z.string().url().default('https://testnet.monadexplorer.com'),
 
   WALLET_PRIVATE_KEY: z
@@ -34,21 +31,21 @@ const schema = z.object({
   ROUTER_ADDRESS: addr,
   FACTORY_ADDRESS: addr,
 
-  DEFAULT_BUY_MON: numFromEnv(0.5),
-  SLIPPAGE_BPS: numFromEnv(150),
-  MAX_PRIORITY_FEE_GWEI: numFromEnv(2),
-  GAS_LIMIT: numFromEnv(450_000),
+  DEFAULT_BUY_MON: num(0.5),
+  SLIPPAGE_BPS: num(150),
+  MAX_PRIORITY_FEE_GWEI: num(2),
+  GAS_LIMIT: num(450_000),
 
-  MAX_POSITIONS: numFromEnv(5),
-  STOP_LOSS_PCT: numFromEnv(25),
-  TAKE_PROFIT_PCT: numFromEnv(80),
-  TRAILING_STOP_PCT: numFromEnv(15),
-  MAX_DAILY_LOSS_MON: numFromEnv(5),
+  MAX_POSITIONS: num(5),
+  STOP_LOSS_PCT: num(25),
+  TAKE_PROFIT_PCT: num(80),
+  TRAILING_STOP_PCT: num(15),
+  MAX_DAILY_LOSS_MON: num(5),
 
-  SCAN_NEW_PAIRS: bool.default(true),
-  MIN_LIQUIDITY_MON: numFromEnv(25),
-  MAX_BUY_TAX_BPS: numFromEnv(500),
+  MIN_LIQUIDITY_MON: num(25),
+  MAX_BUY_TAX_BPS: num(500),
   HONEYPOT_CHECK: bool.default(true),
+  MAX_BLOCKS_PER_TICK: num(2000),
 
   COPY_WALLETS: z
     .string()
@@ -61,11 +58,16 @@ const schema = z.object({
         .filter((x) => isAddress(x)) as Address[],
     ),
 
-  TELEGRAM_BOT_TOKEN: z.string().optional(),
-  TELEGRAM_CHAT_ID: z.string().optional(),
+  TELEGRAM_BOT_TOKEN: z.string().min(1),
+  TELEGRAM_CHAT_ID: z.string().min(1),
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
+  CRON_SECRET: z.string().optional(),
 
-  LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
+  KV_REST_API_URL: z.string().url(),
+  KV_REST_API_TOKEN: z.string().min(1),
+
   DRY_RUN: bool.default(true),
+  LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
 });
 
 export type Config = z.infer<typeof schema>;

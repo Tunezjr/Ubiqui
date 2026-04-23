@@ -1,126 +1,140 @@
-# Ubiqui — Monad Telegram Trading Bot
+# Ubiqui — Monad Telegram Trading Bot (Vercel)
 
-A MEVX-style trading bot for Monad that you drive entirely from Telegram.
-No web UI, no public endpoints — the process connects out to Telegram over
-long-polling so it can run on any worker host (Fly, Railway, Render, a VPS,
-Docker, a Raspberry Pi).
+A MEVX-style trading bot for Monad, deployed as Vercel serverless functions
+and driven over Telegram. No dedicated worker host, no VPS — Vercel Cron
+ticks the sniper / copy-trader / risk-manager each minute, and Telegram
+webhooks handle manual commands.
 
-## Features
+## Architecture
 
-- **Telegram-native** command interface (`/buy`, `/sell`, `/quote`, `/snipe`,
-  `/copy`, `/positions`, …) scoped to a single authorized chat id.
-- **Sniper** — listens to `PairCreated` on the DEX factory and auto-buys new
-  WMON pairs that pass liquidity + tax heuristics.
-- **Copy trader** — mirrors swaps from a list of leader wallets.
-- **Risk manager** — per-position stop-loss, take-profit, trailing stop,
-  max-position cap, daily loss limit.
-- **Dry-run by default** so you can observe before committing capital.
-
-## Quick start (local)
-
-```bash
-npm install
-cp .env.example .env
-# fill in at minimum:
-#   WALLET_PRIVATE_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-#   ROUTER_ADDRESS, FACTORY_ADDRESS, WMON_ADDRESS
-npm run dev
+```
+Telegram ──► POST /api/telegram   (webhook, runs on message)
+Vercel ───► GET  /api/cron/scan   (every minute — new-pair sniper)
+Vercel ───► GET  /api/cron/risk   (every minute — SL / TP / trailing stop)
+Vercel ───► GET  /api/cron/copy   (every minute — leader-wallet mirror)
+                 │
+                 ▼
+        Upstash Redis  (open positions, flags, lastBlock, daily PnL)
+                 │
+                 ▼
+         Monad RPC  (quotes, swaps, event logs)
 ```
 
-Then message your bot on Telegram and send `/help`.
+Everything is stateless between invocations — state lives in Upstash Redis,
+so any function invocation can read and write the same position book.
 
-## Quick start (Docker)
+## Caveats
 
-```bash
-docker build -t ubiqui .
-docker run --rm --env-file .env ubiqui
-```
+- **Sniping latency is ~60s.** Vercel Cron's fastest cadence is once per
+  minute. That's fine for copy-trading and risk exits; it's not competitive
+  for memecoin front-running. For sub-second sniping you need a persistent
+  worker (the previous commit had the Docker/Procfile setup for that).
+- Each cron tick is capped at `MAX_BLOCKS_PER_TICK` blocks so it finishes
+  inside Vercel's `maxDuration`. If you fall behind, drop the cap or raise
+  the function duration.
+- Cron on the Hobby plan has limits (check Vercel's current quotas). The
+  three crons here run once per minute each.
 
 ## Deploying
 
-The repo ships with three deployment descriptors so common platforms pick it
-up without extra config:
+1. Push this repo to GitHub and import it on Vercel. Auto-deploys from the
+   configured branch will just work — there is no build step beyond
+   TypeScript's type check.
+2. Attach an **Upstash Redis** integration from the Vercel Marketplace. It
+   provisions `KV_REST_API_URL` and `KV_REST_API_TOKEN` automatically.
+3. In Project Settings → Environment Variables, set everything in
+   `.env.example`:
+   - `WALLET_PRIVATE_KEY` (0x + 64 hex)
+   - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+   - `TELEGRAM_WEBHOOK_SECRET` (any random string)
+   - `MONAD_RPC_URL`, `WMON_ADDRESS`, `ROUTER_ADDRESS`, `FACTORY_ADDRESS`
+   - Leave `DRY_RUN=true` until you trust the config.
+4. After the first deploy, hit `https://<your-project>.vercel.app/api/setup`
+   once in a browser or via `curl`. It registers the Telegram webhook,
+   sets the bot's command list, and clears any pending updates.
+5. Message the bot on Telegram, send `/help`.
 
-| Platform | File | Notes |
-| --- | --- | --- |
-| Docker / Fly.io / self-host | `Dockerfile` | multi-stage, runs as non-root |
-| Heroku / Render (Procfile) | `Procfile` | `release` builds, `worker` runs |
-| Railway | `railway.json` | Nixpacks build + `npm start` |
-
-All of them expect the same environment variables (see `.env.example`).
-There is no HTTP server to expose — set the dyno/service type to **worker**,
-not **web**.
-
-### Avoiding the common deploy failures
-
-- Set every variable in the host's secret manager; a missing `ROUTER_ADDRESS`
-  or `WMON_ADDRESS` makes zod reject the config at startup with a clear error.
-- Platforms that install only production deps at runtime (Heroku, some
-  Railway templates) need the build step to run first. The `Procfile`'s
-  `release: npm run build` handles that; for Docker the multi-stage build
-  does it. For Nixpacks/Railway, `buildCommand` in `railway.json` runs
-  `npm ci && npm run build`.
-- `pino-pretty` is kept as a runtime dep so logs stay readable even if the
-  host strips devDependencies.
-- The bot uses Telegram long-polling, so you do **not** need to expose a port
-  or configure a webhook URL.
-
-## Required env vars
-
-| Variable | Why |
-| --- | --- |
-| `WALLET_PRIVATE_KEY` | 0x-prefixed hex key of the hot wallet |
-| `TELEGRAM_BOT_TOKEN` | from @BotFather |
-| `TELEGRAM_CHAT_ID` | only this chat can command the bot |
-| `MONAD_RPC_URL` | HTTP RPC (HTTPS recommended) |
-| `ROUTER_ADDRESS` | V2-style router on your chosen Monad DEX |
-| `FACTORY_ADDRESS` | matching factory |
-| `WMON_ADDRESS` | wrapped-MON used as the quote asset |
-
-See `.env.example` for the full list (slippage, SL/TP, copy wallets, etc.).
+Vercel sets `CRON_SECRET` automatically on production deployments; the cron
+endpoints verify it so no one else can trigger them.
 
 ## Commands (over Telegram)
 
 | Command | What it does |
 | --- | --- |
 | `/wallet` | show address + MON balance |
-| `/positions` | list open positions + daily PnL |
+| `/positions` | open positions + daily PnL |
 | `/quote <token> [mon]` | round-trip buy/sell quote |
-| `/check <token>` | buy-tax / sell-tax heuristic |
+| `/check <token>` | buy-tax / sell-tax probe |
 | `/buy <token> [mon]` | market buy with MON |
 | `/sell <token>` | sell full wallet balance |
-| `/snipe on\|off` | toggle the sniper loop |
-| `/copy on\|off` | toggle the copy trader |
-| `/status` | runtime status |
-| `/settings` | show config knobs |
+| `/snipe on\|off` | enable / disable the sniper cron |
+| `/copy on\|off` | enable / disable copy-trading |
+| `/status` | block height, flags, open positions |
+| `/settings` | config knobs |
 | `/help` | list commands |
 
-Any chat id that isn't `TELEGRAM_CHAT_ID` gets `unauthorized` and nothing else.
+Only `TELEGRAM_CHAT_ID` is accepted; every other chat id gets
+`unauthorized` and nothing else.
+
+## Strategy toggles
+
+The sniper and copy trader are **off by default**. They don't run just
+because the cron is defined; each tick checks a Redis flag that you flip
+with `/snipe on` or `/copy on`. That lets you deploy safely and opt in
+later.
+
+## Risk management
+
+`api/cron/risk.ts` scans every open position each minute and exits if:
+
+- price is down ≥ `STOP_LOSS_PCT` from entry, or
+- price is up ≥ `TAKE_PROFIT_PCT` from entry, or
+- price is up from entry but down ≥ `TRAILING_STOP_PCT` from peak.
+
+`openPosition` refuses to add new entries if `MAX_POSITIONS` is reached or
+the rolling daily PnL dips below `-MAX_DAILY_LOSS_MON`.
+
+## Local development
+
+```bash
+npm install
+cp .env.example .env.local
+npx vercel dev           # serves /api/* on localhost:3000
+```
+
+Use ngrok or `vercel dev --listen` + a tunnel to give Telegram a URL it can
+POST to if you want to test the webhook against a real bot.
 
 ## Layout
 
 ```
-src/
-  index.ts          entry — boots the Telegram bot
+api/
+  telegram.ts       Telegram webhook
+  setup.ts          one-shot setWebhook + setMyCommands
+  cron/
+    scan.ts         sniper tick
+    risk.ts         position manager tick
+    copy.ts         copy trader tick
+lib/
   config.ts         zod-validated env
-  logger.ts         pino logger
+  logger.ts         JSON lines → Vercel log drain
   chain.ts          viem Monad clients + wallet
   abis.ts           ERC20 / router / factory / pair ABIs
   tokens.ts         metadata + balance helpers
-  router.ts         quote / buy / sell against a V2-style router
-  scanner.ts        PairCreated watcher
+  router.ts         quote / buy / sell
+  scanner.ts        PairCreated log reader
   safety.ts         buy-sell round-trip probe
-  risk.ts           position book with SL / TP / trailing exits
-  telegram.ts       long-poll bot (commands + outgoing notifications)
-  notifier.ts       thin re-export for internal call sites
-  strategies/
-    snipe.ts        Sniper class (start/stop)
-    copy.ts         CopyTrader class (start/stop)
+  state.ts          Upstash Redis wrapper (positions, flags, lastBlock)
+  risk.ts           open/close/evaluate positions
+  telegram.ts       Telegram API helpers
+  commands.ts       command dispatch (shared by webhook)
+  cron-auth.ts      verify CRON_SECRET on cron routes
+vercel.json         cron schedule + function durations
 ```
 
 ## Safety
 
 - Experimental software. Use testnet until the config is trusted.
 - The safety probe is a heuristic, not a honeypot guarantee.
-- `WALLET_PRIVATE_KEY` lives in `.env`; keep it out of git.
+- `WALLET_PRIVATE_KEY` lives in Vercel env vars; never commit it.
 - Fund the hot wallet only with what you are willing to lose.

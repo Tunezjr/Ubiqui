@@ -1,7 +1,6 @@
 import { parseEther, type Address } from 'viem';
 import { loadConfig } from './config.js';
 import { quoteBuy, quoteSell } from './router.js';
-import { logger } from './logger.js';
 
 const cfg = loadConfig();
 
@@ -12,11 +11,6 @@ export type SafetyReport = {
   reasons: string[];
 };
 
-/**
- * Probe a token by quoting a tiny round-trip buy+sell. Non-authoritative —
- * a real honeypot check should simulate the swap; this heuristic is useful to
- * reject obvious fee-on-transfer traps before committing capital.
- */
 export async function checkToken(token: Address): Promise<SafetyReport> {
   const reasons: string[] = [];
   const probeMon = 0.01;
@@ -37,7 +31,5 @@ export async function checkToken(token: Address): Promise<SafetyReport> {
   if (sellTaxBps > cfg.MAX_BUY_TAX_BPS) reasons.push(`sell tax too high: ${sellTaxBps} bps`);
   if (sell.amountOut === 0n) reasons.push('cannot sell');
 
-  const report = { ok: reasons.length === 0, buyTaxBps, sellTaxBps, reasons };
-  logger.debug({ token, ...report }, 'safety probe');
-  return report;
+  return { ok: reasons.length === 0, buyTaxBps, sellTaxBps, reasons };
 }

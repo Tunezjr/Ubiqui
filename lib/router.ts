@@ -1,6 +1,6 @@
 import { maxUint256, parseEther, parseUnits, type Address, type Hex } from 'viem';
 import { erc20Abi, routerAbi } from './abis.js';
-import { getWallet, httpClient, publicClient } from './chain.js';
+import { getWallet, publicClient } from './chain.js';
 import { loadConfig } from './config.js';
 import { logger } from './logger.js';
 import { getTokenMetadata } from './tokens.js';
@@ -11,7 +11,7 @@ export type Quote = {
   amountIn: bigint;
   amountOut: bigint;
   path: Address[];
-  pricePerToken: number; // MON per token unit
+  pricePerToken: number;
 };
 
 function deadline(secondsFromNow = 60): bigint {
@@ -25,28 +25,28 @@ function applySlippage(amount: bigint, slippageBps: number): bigint {
 export async function quoteBuy(token: Address, amountInMon: number): Promise<Quote> {
   const amountIn = parseEther(amountInMon.toString());
   const path = [cfg.WMON_ADDRESS, token];
-  const amounts = (await httpClient.readContract({
+  const amounts = (await publicClient.readContract({
     address: cfg.ROUTER_ADDRESS,
     abi: routerAbi,
     functionName: 'getAmountsOut',
     args: [amountIn, path],
   })) as readonly bigint[];
   const amountOut = amounts[amounts.length - 1] ?? 0n;
-  const meta = await getTokenMetadata(httpClient, token);
+  const meta = await getTokenMetadata(publicClient, token);
   const price = Number(amountIn) / 1e18 / (Number(amountOut) / 10 ** meta.decimals);
   return { amountIn, amountOut, path: path as Address[], pricePerToken: price };
 }
 
 export async function quoteSell(token: Address, amountInToken: bigint): Promise<Quote> {
   const path = [token, cfg.WMON_ADDRESS];
-  const amounts = (await httpClient.readContract({
+  const amounts = (await publicClient.readContract({
     address: cfg.ROUTER_ADDRESS,
     abi: routerAbi,
     functionName: 'getAmountsOut',
     args: [amountInToken, path],
   })) as readonly bigint[];
   const amountOut = amounts[amounts.length - 1] ?? 0n;
-  const meta = await getTokenMetadata(httpClient, token);
+  const meta = await getTokenMetadata(publicClient, token);
   const price = Number(amountOut) / 1e18 / (Number(amountInToken) / 10 ** meta.decimals);
   return { amountIn: amountInToken, amountOut, path: path as Address[], pricePerToken: price };
 }
@@ -57,14 +57,15 @@ export async function buy(token: Address, amountInMon: number): Promise<Hex> {
   const minOut = applySlippage(quote.amountOut, cfg.SLIPPAGE_BPS);
 
   if (cfg.DRY_RUN) {
-    logger.info(
-      { token, amountInMon, expectedOut: quote.amountOut.toString(), minOut: minOut.toString() },
-      'DRY_RUN buy — not sending tx',
-    );
+    logger.info('DRY_RUN buy — not sending tx', {
+      token,
+      amountInMon,
+      expectedOut: quote.amountOut.toString(),
+    });
     return '0xdryrun' as Hex;
   }
 
-  const hash = await client.writeContract({
+  return client.writeContract({
     account: client.account!,
     chain: client.chain!,
     address: cfg.ROUTER_ADDRESS,
@@ -75,7 +76,6 @@ export async function buy(token: Address, amountInMon: number): Promise<Hex> {
     gas: BigInt(cfg.GAS_LIMIT),
     maxPriorityFeePerGas: parseUnits(cfg.MAX_PRIORITY_FEE_GWEI.toString(), 9),
   });
-  return hash;
 }
 
 async function ensureApproval(token: Address, spender: Address, owner: Address): Promise<void> {
@@ -86,10 +86,8 @@ async function ensureApproval(token: Address, spender: Address, owner: Address):
     args: [owner, spender],
   })) as bigint;
   if (current >= maxUint256 / 2n) return;
-  if (cfg.DRY_RUN) {
-    logger.info({ token, spender }, 'DRY_RUN approve — skipping');
-    return;
-  }
+  if (cfg.DRY_RUN) return;
+
   const { client } = getWallet();
   const hash = await client.writeContract({
     account: client.account!,
@@ -110,14 +108,15 @@ export async function sell(token: Address, amountInToken: bigint): Promise<Hex> 
   const minOut = applySlippage(quote.amountOut, cfg.SLIPPAGE_BPS);
 
   if (cfg.DRY_RUN) {
-    logger.info(
-      { token, amountIn: amountInToken.toString(), expectedOut: quote.amountOut.toString() },
-      'DRY_RUN sell — not sending tx',
-    );
+    logger.info('DRY_RUN sell — not sending tx', {
+      token,
+      amountIn: amountInToken.toString(),
+      expectedOut: quote.amountOut.toString(),
+    });
     return '0xdryrun' as Hex;
   }
 
-  const hash = await client.writeContract({
+  return client.writeContract({
     account: client.account!,
     chain: client.chain!,
     address: cfg.ROUTER_ADDRESS,
@@ -127,5 +126,4 @@ export async function sell(token: Address, amountInToken: bigint): Promise<Hex> 
     gas: BigInt(cfg.GAS_LIMIT),
     maxPriorityFeePerGas: parseUnits(cfg.MAX_PRIORITY_FEE_GWEI.toString(), 9),
   });
-  return hash;
 }

@@ -1,4 +1,4 @@
-import { type Address, type PublicClient } from 'viem';
+import type { Address, PublicClient } from 'viem';
 import { erc20Abi } from './abis.js';
 
 export type TokenMetadata = {
@@ -6,7 +6,6 @@ export type TokenMetadata = {
   name: string;
   symbol: string;
   decimals: number;
-  totalSupply: bigint;
 };
 
 const cache = new Map<Address, TokenMetadata>();
@@ -18,11 +17,10 @@ export async function getTokenMetadata(
   const cached = cache.get(address);
   if (cached) return cached;
 
-  const [name, symbol, decimals, totalSupply] = await Promise.all([
+  const [name, symbol, decimals] = await Promise.all([
     client.readContract({ address, abi: erc20Abi, functionName: 'name' }).catch(() => 'unknown'),
     client.readContract({ address, abi: erc20Abi, functionName: 'symbol' }).catch(() => '???'),
     client.readContract({ address, abi: erc20Abi, functionName: 'decimals' }).catch(() => 18),
-    client.readContract({ address, abi: erc20Abi, functionName: 'totalSupply' }).catch(() => 0n),
   ]);
 
   const meta: TokenMetadata = {
@@ -30,7 +28,6 @@ export async function getTokenMetadata(
     name: name as string,
     symbol: symbol as string,
     decimals: Number(decimals),
-    totalSupply: totalSupply as bigint,
   };
   cache.set(address, meta);
   return meta;

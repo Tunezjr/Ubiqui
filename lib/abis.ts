@@ -30,32 +30,9 @@ export const erc20Abi = [
     ],
     outputs: [{ type: 'bool' }],
   },
-  {
-    type: 'event',
-    name: 'Transfer',
-    inputs: [
-      { indexed: true, name: 'from', type: 'address' },
-      { indexed: true, name: 'to', type: 'address' },
-      { indexed: false, name: 'value', type: 'uint256' },
-    ],
-  },
 ] as const;
 
 export const routerAbi = [
-  {
-    type: 'function',
-    name: 'WETH',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ type: 'address' }],
-  },
-  {
-    type: 'function',
-    name: 'factory',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ type: 'address' }],
-  },
   {
     type: 'function',
     name: 'getAmountsOut',
@@ -117,20 +94,8 @@ export const factoryAbi = [
 ] as const;
 
 export const pairAbi = [
-  {
-    type: 'function',
-    name: 'token0',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ type: 'address' }],
-  },
-  {
-    type: 'function',
-    name: 'token1',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ type: 'address' }],
-  },
+  { type: 'function', name: 'token0', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'token1', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
   {
     type: 'function',
     name: 'getReserves',
@@ -140,14 +105,6 @@ export const pairAbi = [
       { name: 'reserve0', type: 'uint112' },
       { name: 'reserve1', type: 'uint112' },
       { name: 'blockTimestampLast', type: 'uint32' },
-    ],
-  },
-  {
-    type: 'event',
-    name: 'Sync',
-    inputs: [
-      { indexed: false, name: 'reserve0', type: 'uint112' },
-      { indexed: false, name: 'reserve1', type: 'uint112' },
     ],
   },
 ] as const;

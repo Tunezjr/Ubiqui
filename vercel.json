@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    { "path": "/api/cron/scan", "schedule": "* * * * *" },
+    { "path": "/api/cron/risk", "schedule": "* * * * *" },
+    { "path": "/api/cron/copy", "schedule": "* * * * *" }
+  ],
+  "functions": {
+    "api/telegram.ts": { "maxDuration": 30 },
+    "api/cron/scan.ts": { "maxDuration": 60 },
+    "api/cron/risk.ts": { "maxDuration": 60 },
+    "api/cron/copy.ts": { "maxDuration": 60 },
+    "api/setup.ts": { "maxDuration": 15 }
+  }
+}
